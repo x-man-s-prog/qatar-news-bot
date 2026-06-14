@@ -1,0 +1,38 @@
+name: Qatar News Button
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # poll for "full text" button taps every 5 min (best-effort; GitHub cron may lag)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: qatar-news-button
+  cancel-in-progress: false
+
+jobs:
+  callback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Poll button taps
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+        run: node callback.mjs
+      - name: Commit offset
+        run: |
+          git config user.name "qatar-news-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/offset.json
+          if git diff --cached --quiet; then echo "no offset change"; exit 0; fi
+          git commit -m "state: offset $(date -u +%FT%TZ)"
+          for i in 1 2 3; do git pull --rebase --autostash && git push && break || sleep 5; done

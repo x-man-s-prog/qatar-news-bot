@@ -1,0 +1,39 @@
+name: Qatar News Digest
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # every 6 hours (UTC). Change here to adjust cadence.
+  workflow_dispatch: {}      # allow manual run from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: qatar-news-digest
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run digest
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+        run: node ingest.mjs
+      - name: Commit state
+        run: |
+          git config user.name "qatar-news-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then echo "no state changes"; exit 0; fi
+          git commit -m "state: digest $(date -u +%FT%TZ)"
+          for i in 1 2 3; do git pull --rebase --autostash && git push && break || sleep 5; done

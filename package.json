@@ -1,0 +1,16 @@
+{
+  "name": "qatar-news-bot",
+  "version": "1.0.0",
+  "description": "Cloud Qatar newspapers -> Telegram Arabic digest (GitHub Actions). All papers, sports+jobs excluded, cross-source dedup, full-text-on-demand button, official gazette.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "ingest": "node ingest.mjs",
+    "callback": "node callback.mjs",
+    "test": "node test_lib.mjs"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.5.0",
+    "jsdom": "^24.1.0"
+  }
+}
