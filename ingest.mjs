@@ -113,6 +113,7 @@ for (const c of ordered) {
     await sleep(PACE_MS);
   } catch (e) {
     if (e instanceof QuotaError) { quota = true; console.log('Gemini quota reached — stopping; resumes next run.'); break; }
+    if (String(e).includes('API key not valid') || String(e).includes('API_KEY_INVALID')) { console.error('FATAL: GEMINI_API_KEY is invalid — fix the secret and re-run.'); break; }
     console.log('item error', c.article_id, String(e).slice(0, 160));
   }
 }

@@ -1,9 +1,9 @@
 // Shared runtime helpers: Gemini, Telegram, state, formatting.
 import fs from 'fs';
 
-const TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
-const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
-const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
+const GEMINI_KEY = (process.env.GEMINI_API_KEY || '').trim();
+const MODEL = (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
 
 export class QuotaError extends Error {}
 export const sleep = (ms) => new Promise(r => setTimeout(r, ms));
