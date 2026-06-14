@@ -10,6 +10,7 @@ const PACE_MS = Number(process.env.PACE_MS || 4200);   // ~14/min, respects Gemi
 const SEEN_KEEP = 6000, STORE_KEEP = 300;
 
 if (!CHAT_ID) { console.error('Missing TELEGRAM_CHAT_ID'); process.exit(1); }
+{ const me = await tgApi('getMe'); if (!me || !me.ok) { console.error('FATAL: TELEGRAM_BOT_TOKEN is invalid — getMe failed: ' + JSON.stringify(me)); process.exit(1); } console.log('Bot OK: @' + (me.result && me.result.username)); }
 
 const seen = loadJson(SEEN, {});    // id -> { ts, sig:[...], sent:0|1, section? }
 const store = loadJson(STORE, {});  // id -> { newspaper, lang, title_ar, full_text, url, pub_date, ts }
