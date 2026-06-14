@@ -2,7 +2,7 @@ name: Qatar News Button
 
 on:
   schedule:
-    - cron: '*/30 * * * *'   # poll for "full text" button taps every 30 min (private-repo friendly; make repo public + use */5 for a faster button)
+    - cron: '*/5 * * * *'    # every 5 min; each run long-polls ~4.5 min -> near-continuous listening (free on a public repo)
   workflow_dispatch: {}
 
 permissions:
@@ -15,7 +15,7 @@ concurrency:
 jobs:
   callback:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
