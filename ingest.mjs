@@ -8,6 +8,7 @@ const SEEN = 'data/seen.json', STORE = 'data/articles.json', FLAGS = 'data/flags
 const TH = Number(process.env.DEDUP_THRESHOLD || 0.5);
 const PACE_MS = Number(process.env.PACE_MS || 4200);   // ~14/min, respects Gemini free RPM
 const SEEN_KEEP = 8000, STORE_KEEP = 800;
+const MARK_SEEN_ONLY = ['1', 'true'].includes((process.env.MARK_SEEN_ONLY || '').toLowerCase()); // reset: mark all current feed seen w/o sending, fire separator once
 
 if (!CHAT_ID) { console.error('Missing TELEGRAM_CHAT_ID'); process.exit(1); }
 { const me = await tgApi('getMe'); if (!me || !me.ok) { console.error('FATAL: TELEGRAM_BOT_TOKEN is invalid — getMe failed: ' + JSON.stringify(me)); process.exit(1); } console.log('Bot OK: @' + (me.result && me.result.username)); }
@@ -67,6 +68,20 @@ for (const c of fresh) { if (!groups[c.newspaper]) { groups[c.newspaper] = []; o
 for (const p of order) groups[p].sort((a, b) => b._date - a._date);
 const ordered = []; let idx = 0, added = true;
 while (added) { added = false; for (const p of order) { if (groups[p][idx]) { ordered.push(groups[p][idx]); added = true; } } idx++; }
+
+// RESET MODE: mark every current candidate as seen WITHOUT sending, fire the one-time separator, then exit.
+// Runs on the GitHub runner so the candidate set matches normal runs exactly (a local reset misses runner-only items).
+if (MARK_SEEN_ONLY) {
+  for (const c of Object.values(uniq)) if (!seen[c.article_id]) seen[c.article_id] = { ts: Date.now(), sig: [], sent: 1, section: 'reset' };
+  if (!flags.backlogDone) {
+    await tgApi('sendMessage', { chat_id: CHAT_ID, parse_mode: 'HTML', text: '✅ <b>انتهى إرسال الأخبار المتراكمة.</b>\n\nمن الآن ستصلك الأخبار الجديدة فقط فور ورودها — خبرٌ واحدٌ لكلِّ قصّة، بلا تكرار.' });
+    flags.backlogDone = true;
+  }
+  pruneByTs(seen, SEEN_KEEP);
+  saveJson(SEEN, seen); saveJson(FLAGS, flags);
+  console.log(`MARK_SEEN_ONLY: marked ${Object.keys(uniq).length} candidates seen; separator sent=${flags.backlogDone}; seen=${Object.keys(seen).length}`);
+  process.exit(0);
+}
 
 const MAX = Number(process.env.MAX_PER_RUN || 80); // moderate cap: runs finish & commit reliably (Gemini free quota is the real limiter)
 const work = ordered.slice(0, MAX);

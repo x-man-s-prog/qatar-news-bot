@@ -3,7 +3,12 @@ name: Qatar News Digest
 on:
   schedule:
     - cron: '0 */6 * * *'   # every 6 hours (UTC). Change here to adjust cadence.
-  workflow_dispatch: {}      # allow manual run from the Actions tab
+  workflow_dispatch:         # allow manual run from the Actions tab
+    inputs:
+      reset:
+        description: 'Mark all current feed as seen WITHOUT sending, then send the "backlog finished" separator (one-time reset)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -28,6 +33,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          MARK_SEEN_ONLY: ${{ inputs.reset }}
         run: node ingest.mjs
       - name: Commit state
         run: |
