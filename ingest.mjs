@@ -4,16 +4,17 @@ import { buildSources, GAZETTE_SOURCE, fetchText, parseSource, toCandidates, ext
 import { gemini, tgApi, esc, fmtDate, chunkText, loadJson, saveJson, pruneByTs, sleep, QuotaError } from './bot.mjs';
 
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const SEEN = 'data/seen.json', STORE = 'data/articles.json';
+const SEEN = 'data/seen.json', STORE = 'data/articles.json', FLAGS = 'data/flags.json';
 const TH = Number(process.env.DEDUP_THRESHOLD || 0.5);
 const PACE_MS = Number(process.env.PACE_MS || 4200);   // ~14/min, respects Gemini free RPM
-const SEEN_KEEP = 6000, STORE_KEEP = 300;
+const SEEN_KEEP = 8000, STORE_KEEP = 800;
 
 if (!CHAT_ID) { console.error('Missing TELEGRAM_CHAT_ID'); process.exit(1); }
 { const me = await tgApi('getMe'); if (!me || !me.ok) { console.error('FATAL: TELEGRAM_BOT_TOKEN is invalid — getMe failed: ' + JSON.stringify(me)); process.exit(1); } console.log('Bot OK: @' + (me.result && me.result.username)); }
 
 const seen = loadJson(SEEN, {});    // id -> { ts, sig:[...], sent:0|1, section? }
 const store = loadJson(STORE, {});  // id -> { newspaper, lang, title_ar, full_text, url, pub_date, ts }
+const flags = loadJson(FLAGS, { backlogDone: false }); // one-time "backlog finished" separator
 
 function buildPrompt(c, body) {
   return [
@@ -67,7 +68,7 @@ for (const p of order) groups[p].sort((a, b) => b._date - a._date);
 const ordered = []; let idx = 0, added = true;
 while (added) { added = false; for (const p of order) { if (groups[p][idx]) { ordered.push(groups[p][idx]); added = true; } } idx++; }
 
-const MAX = Number(process.env.MAX_PER_RUN || 60);
+const MAX = Number(process.env.MAX_PER_RUN || 400);
 const work = ordered.slice(0, MAX);
 console.log(`candidates: total=${Object.keys(uniq).length} new=${ordered.length} processing=${work.length} (MAX_PER_RUN=${MAX})`);
 
@@ -108,7 +109,9 @@ for (const c of work) {
     const res = await tgApi('sendMessage', { chat_id: CHAT_ID, text: msg, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: { inline_keyboard: [[{ text: btn, callback_data: c.article_id }]] } });
     if (res && res.ok) {
       seen[c.article_id] = { ts: Date.now(), sig, sent: 1 };
-      store[c.article_id] = { newspaper: c.newspaper, lang: c.lang, title_ar, full_text: full_text.slice(0, 14000), url: c.url, pub_date: c.pub_date, ts: Date.now() };
+      const rec = { newspaper: c.newspaper, lang: c.lang, title_ar, url: c.url, pub_date: c.pub_date, ts: Date.now() };
+      if (c.type === 'meezan') rec.full_text = full_text.slice(0, 4000); // gazette: keep explanation+link; news: re-fetched on tap
+      store[c.article_id] = rec;
       acceptedSigs.push(sig); recentSigs.push(sig); sent++;
     } else {
       console.log('send failed', c.article_id, JSON.stringify(res).slice(0, 160));
@@ -121,8 +124,16 @@ for (const c of work) {
   }
 }
 
+// one-time separator: fires when the accumulated backlog is fully drained (no leftover, not quota-stopped)
+const leftover = ordered.length - work.length;
+if (!quota && leftover <= 0 && !flags.backlogDone && Object.keys(store).length > 0) {
+  await tgApi('sendMessage', { chat_id: CHAT_ID, parse_mode: 'HTML', text: '✅ <b>انتهى إرسال الأخبار المتراكمة (آخر 48 ساعة).</b>\n\nمن الآن ستصلك الأخبار الجديدة فقط فور ورودها.' });
+  flags.backlogDone = true;
+  console.log('backlog catch-up separator sent');
+}
 pruneByTs(seen, SEEN_KEEP);
 pruneByTs(store, STORE_KEEP);
 saveJson(SEEN, seen);
 saveJson(STORE, store);
+saveJson(FLAGS, flags);
 console.log(`DONE sent=${sent} dups=${dups} sports=${sports} invalid=${invalid} quotaStop=${quota} | seen=${Object.keys(seen).length} store=${Object.keys(store).length}`);

@@ -1,5 +1,6 @@
 // Poll Telegram for "full text" button taps and reply with the full article (translated to Arabic if English).
 import { gemini, tgApi, esc, fmtDate, chunkText, loadJson, saveJson, sleep, QuotaError } from './bot.mjs';
+import { fetchText, extractBody } from './lib.mjs';
 
 const STORE = 'data/articles.json', OFFSET = 'data/offset.json';
 const store = loadJson(STORE, {});
@@ -20,6 +21,7 @@ if (upd && upd.ok) {
     const a = store[id];
     if (!a) { await tgApi('sendMessage', { chat_id: chat, text: 'تعذّر إيجاد هذا الخبر (قد يكون قديماً). افتح الرابط من الصحيفة.' }); handled++; continue; }
     let text = a.full_text || '';
+    if (!text && a.url) { const r = await fetchText(a.url, { timeout: 25000, retries: 1 }); text = extractBody(r.body, a.url); } // news: re-fetch full article on demand
     if (a.lang === 'en' && text) {
       try { const tr = await gemini(`Translate the following Qatari newspaper article fully into clear Modern Standard Arabic. Output ONLY the Arabic translation, no preamble:\n\n${text}`, { maxTokens: 8192 }); if (tr) text = tr; }
       catch (e) { /* quota/etc: fall back to original text */ }
