@@ -68,7 +68,7 @@ for (const p of order) groups[p].sort((a, b) => b._date - a._date);
 const ordered = []; let idx = 0, added = true;
 while (added) { added = false; for (const p of order) { if (groups[p][idx]) { ordered.push(groups[p][idx]); added = true; } } idx++; }
 
-const MAX = Number(process.env.MAX_PER_RUN || 400);
+const MAX = Number(process.env.MAX_PER_RUN || 80); // moderate cap: runs finish & commit reliably (Gemini free quota is the real limiter)
 const work = ordered.slice(0, MAX);
 console.log(`candidates: total=${Object.keys(uniq).length} new=${ordered.length} processing=${work.length} (MAX_PER_RUN=${MAX})`);
 
@@ -109,9 +109,7 @@ for (const c of work) {
     const res = await tgApi('sendMessage', { chat_id: CHAT_ID, text: msg, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: { inline_keyboard: [[{ text: btn, callback_data: c.article_id }]] } });
     if (res && res.ok) {
       seen[c.article_id] = { ts: Date.now(), sig, sent: 1 };
-      const rec = { newspaper: c.newspaper, lang: c.lang, title_ar, url: c.url, pub_date: c.pub_date, ts: Date.now() };
-      if (c.type === 'meezan') rec.full_text = full_text.slice(0, 4000); // gazette: keep explanation+link; news: re-fetched on tap
-      store[c.article_id] = rec;
+      store[c.article_id] = { newspaper: c.newspaper, lang: c.lang, title_ar, full_text: full_text.slice(0, 14000), url: c.url, pub_date: c.pub_date, ts: Date.now() }; // store full text so the button is reliable (no re-fetch needed at tap time)
       acceptedSigs.push(sig); recentSigs.push(sig); sent++;
     } else {
       console.log('send failed', c.article_id, JSON.stringify(res).slice(0, 160));
