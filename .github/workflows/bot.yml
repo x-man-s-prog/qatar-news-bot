@@ -2,7 +2,7 @@ name: Qatar News Button
 
 on:
   schedule:
-    - cron: '*/5 * * * *'   # poll for "full text" button taps every 5 min (best-effort; GitHub cron may lag)
+    - cron: '*/30 * * * *'   # poll for "full text" button taps every 30 min (private-repo friendly; make repo public + use */5 for a faster button)
   workflow_dispatch: {}
 
 permissions:
