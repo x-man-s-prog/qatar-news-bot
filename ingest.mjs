@@ -66,14 +66,16 @@ for (const p of order) groups[p].sort((a, b) => b._date - a._date);
 const ordered = []; let idx = 0, added = true;
 while (added) { added = false; for (const p of order) { if (groups[p][idx]) { ordered.push(groups[p][idx]); added = true; } } idx++; }
 
-console.log(`candidates: total=${Object.keys(uniq).length} new=${ordered.length}`);
+const MAX = Number(process.env.MAX_PER_RUN || 60);
+const work = ordered.slice(0, MAX);
+console.log(`candidates: total=${Object.keys(uniq).length} new=${ordered.length} processing=${work.length} (MAX_PER_RUN=${MAX})`);
 
 // 4) process (no cap), stop on Gemini quota
 const recentSigs = Object.values(seen).filter(x => x.sig && x.sig.length && x.sent).map(x => x.sig);
 const acceptedSigs = [];
 let sent = 0, dups = 0, sports = 0, invalid = 0, quota = false;
 
-for (const c of ordered) {
+for (const c of work) {
   try {
     let title_ar = '', summary_ar = '', full_text = '';
     if (c.type === 'meezan') {
