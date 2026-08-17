@@ -24,6 +24,20 @@ Cloud, permanent digest of every Qatar newspaper → Arabic summaries on Telegra
 - **De‑dup strictness:** repo Variable `DEDUP_THRESHOLD` (default `0.5`; higher = fewer merges).
 - **Gemini pacing:** `PACE_MS` (default `4200` ms between calls, ~14/min to respect the free rate limit).
 
+## Voice ads (Cartesia TTS)
+`tts.mjs` turns an Arabic ad script into an MP3 via Cartesia Sonic. Standalone — it is not part of the news pipeline.
+
+```bash
+export CARTESIA_API_KEY=sk_car_...        # never commit this
+node tts.mjs --list-voices                # Arabic-capable voices on your account
+node tts.mjs --voice <voice-id>           # ads/employee-rights.ar.txt -> out/employee-rights.mp3
+node tts.mjs --voice <id> --in ads/x.txt --out out/x.mp3 --speed 1.05 --emotion enthusiastic
+```
+
+- `--list-voices --all` lists every voice; `--lang` changes the filter/generation language (default `ar`).
+- `CARTESIA_MODEL` overrides the model (default `sonic-3.5`); `--speed` takes 0.6–1.5.
+- Output goes to `out/`, which is git-ignored.
+
 ## Notes
 - **لوسيل (Lusail)** is behind Cloudflare and may intermittently block server fetches (best‑effort).
 - The first run sends a catch‑up of the last ~48h, fairly across papers, draining over a few runs (and across days if the free Gemini quota is reached).
