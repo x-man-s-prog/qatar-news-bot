@@ -34,6 +34,8 @@ node tts.mjs --voice <voice-id>           # ads/employee-rights.ar.txt -> out/em
 node tts.mjs --voice <id> --in ads/x.txt --out out/x.mp3 --speed 1.05 --emotion enthusiastic
 ```
 
+Scripts live in `ads/`. `marasim.ar.txt` carries full diacritics (harakat) to steer pronunciation; `marasim.plain.ar.txt` is the same copy undiacritized — try it if the model stumbles on the diacritics.
+
 - `--list-voices --all` lists every voice; `--lang` changes the filter/generation language (default `ar`).
 - `CARTESIA_MODEL` overrides the model (default `sonic-3.5`); `--speed` takes 0.6–1.5.
 - Output goes to `out/`, which is git-ignored.
