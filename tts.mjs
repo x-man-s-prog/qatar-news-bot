@@ -1,12 +1,14 @@
 // Cartesia text-to-speech: turns an Arabic ad script into an audio file.
 //   node tts.mjs --list-voices              # Arabic voices available to your key
 //   node tts.mjs --list-voices --all        # every voice, not just Arabic ones
+//   node tts.mjs --accents                  # accent catalog (no Gulf entry exists)
+//   node tts.mjs --clone --clip me.mp3 --name "Khaliji F"   # clone a Gulf voice
 //   node tts.mjs --voice <voice-id>         # generate ads/employee-rights.ar.txt
 //   node tts.mjs --voice <id> --in ads/x.txt --out out/x.mp3 --speed 1.05
 // Needs CARTESIA_API_KEY in the environment. Node 18+ (uses global fetch).
 
 import { writeFile, readFile, mkdir } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { basename, dirname } from 'node:path';
 
 const API = process.env.CARTESIA_BASE_URL || 'https://api.cartesia.ai';
 const VERSION = '2026-08-14';
@@ -70,9 +72,48 @@ async function listVoices() {
   }
   for (const v of usable) {
     const gender = v.gender || v.gender_presentation || '—';
-    console.log(`${v.id}\t${v.language}\t${gender}\t${v.name}`);
+    // "native" matters: a cross-lingual voice speaking Arabic carries its own accent.
+    const native = v.language === lang ? 'native' : 'cross-lingual';
+    const locales = (v.locales || []).map((l) => l.locale || l).join(',') || '—';
+    console.log(`${v.id}\t${v.language}\t${gender}\t${native}\t${locales}\t${v.name}`);
   }
-  console.log(`\n${usable.length} voice(s). Pass one with: node tts.mjs --voice <id>`);
+  console.log(`\n${usable.length} voice(s). Columns: id, language, gender, nativeness, locales, name.`);
+  console.log('Prefer "native" for Arabic; cross-lingual voices speak it with a foreign accent.');
+}
+
+async function listAccents() {
+  const res = await fetch(`${API}/accents`, { headers: headers() });
+  if (!res.ok) await fail(res);
+  const json = await res.json();
+  const accents = json.data || json.accents || json;
+  const arabic = (Array.isArray(accents) ? accents : []).filter((a) =>
+    String(a.id || a).toLowerCase().includes('arab'),
+  );
+  console.log(JSON.stringify(arabic.length ? arabic : accents, null, 2));
+}
+
+// Cloning is the only route to a Gulf accent — the catalog has no Khaliji entry.
+// Only clone a voice you own or have the speaker's permission to use.
+async function cloneVoice() {
+  const clip = arg('clip');
+  const name = arg('name');
+  if (!clip || clip === true) throw new Error('Missing --clip <audio file> (10-20s of clean speech)');
+  if (!name || name === true) throw new Error('Missing --name "<voice name>"');
+
+  const form = new FormData();
+  form.append('clip', new Blob([await readFile(clip)]), basename(clip));
+  form.append('name', name);
+  form.append('language', arg('lang', 'ar'));
+  const accent = arg('accent');
+  if (accent && accent !== true) form.append('accent', accent);
+  const description = arg('description');
+  if (description && description !== true) form.append('description', description);
+
+  const res = await fetch(`${API}/voices/clone`, { method: 'POST', headers: headers(), body: form });
+  if (!res.ok) await fail(res);
+  const voice = await res.json();
+  console.log(`Cloned voice ${voice.id} (${voice.name})`);
+  console.log(`Use it: node tts.mjs --voice ${voice.id} --in ads/marasim.plain.ar.txt`);
 }
 
 async function generate() {
@@ -96,10 +137,18 @@ async function generate() {
     model_id: MODEL,
     transcript,
     voice: { id: voice },
-    language: arg('lang', 'ar'),
     output_format: { container: 'mp3', sample_rate: 44100, bit_rate: 128000 },
     ...(Object.keys(generation_config).length ? { generation_config } : {}),
   };
+
+  // The API accepts `language` or `locale`, never both. A locale like ar-SA lets
+  // you ask for a regional reading instead of the generic Arabic default.
+  const locale = arg('locale');
+  if (locale && locale !== true) body.locale = locale;
+  else body.language = arg('lang', 'ar');
+
+  const normalization = arg('normalization');
+  if (normalization && normalization !== true) body.normalization = normalization;
 
   console.log(`Generating ${transcript.length} chars with ${MODEL} / voice ${voice}…`);
   const res = await fetch(`${API}/tts/bytes`, {
@@ -122,6 +171,8 @@ if (!KEY) {
 
 try {
   if (arg('list-voices')) await listVoices();
+  else if (arg('accents')) await listAccents();
+  else if (arg('clone')) await cloneVoice();
   else await generate();
 } catch (e) {
   console.error(String(e.message || e));

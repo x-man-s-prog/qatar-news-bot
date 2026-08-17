@@ -34,7 +34,15 @@ node tts.mjs --voice <voice-id>           # ads/employee-rights.ar.txt -> out/em
 node tts.mjs --voice <id> --in ads/x.txt --out out/x.mp3 --speed 1.05 --emotion enthusiastic
 ```
 
-Scripts live in `ads/`. `marasim.ar.txt` carries full diacritics (harakat) to steer pronunciation; `marasim.plain.ar.txt` is the same copy undiacritized — try it if the model stumbles on the diacritics.
+Scripts live in `ads/`. Writing them for the model, not for the page, is most of the quality:
+
+- **No harakat.** Diacritics pull the model toward stiff, over-articulated MSA. `marasim.ar.txt` keeps them for comparison; `marasim.plain.ar.txt` is the same copy without.
+- **No stretched letters.** `عجيييب` gets read literally and comes out mangled — write `عجيب`.
+- **One short sentence per line**, and let punctuation set the rhythm: comma = short beat, period = full stop. Avoid `…`, `«»`, and dashes; they are read or they confuse.
+- **Spell numbers and abbreviations out** the way they should sound.
+- **Heavy dialect is the weak spot.** The accent catalog (`--accents`) has only `arabic`, `arabic-english`, `middle-eastern-arabic`, and `modern-standard-arabic` — no Gulf entry — so plain modern Arabic reads best. For a genuine Khaliji voice, clone one from a recording you have the right to use.
+
+`--locale ar-SA` asks for a regional reading instead of generic `ar` (the API takes `language` or `locale`, never both).
 
 - `--list-voices --all` lists every voice; `--lang` changes the filter/generation language (default `ar`).
 - `CARTESIA_MODEL` overrides the model (default `sonic-3.5`); `--speed` takes 0.6–1.5.
