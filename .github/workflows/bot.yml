@@ -2,7 +2,11 @@ name: Qatar News Button
 
 on:
   schedule:
-    - cron: '*/5 * * * *'    # every 5 min; each run long-polls ~4.5 min -> near-continuous listening (free on a public repo)
+    # FIX 2026-09-04: */5 was silently dropped by GitHub's scheduler under load (observed real
+    # gaps of 2-5h, not 5min -> offset.json frozen since 2026-06-14, zero taps ever handled).
+    # Hourly is a frequency GitHub Actions actually honors reliably; each run now long-polls
+    # ~55 min so coverage stays near-continuous with only a small gap at the hour boundary.
+    - cron: '13 * * * *'
   workflow_dispatch: {}
 
 permissions:
@@ -15,7 +19,7 @@ concurrency:
 jobs:
   callback:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 58
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

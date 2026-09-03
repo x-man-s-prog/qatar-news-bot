@@ -1,16 +1,26 @@
 // Long-poll Telegram for "full text" button taps and reply with the full article (translated to Arabic if English).
-// Runs for a bounded window (~4.5 min) handling taps in real time, then exits; scheduled every 5 min for near-continuous coverage.
+// Runs for a bounded window (~55 min) handling taps in real time, then exits; scheduled hourly.
+// FIX 2026-09-04: was scheduled */5 min with a ~4.5min window — GitHub Actions silently drops
+// high-frequency (<15min) `schedule:` triggers under load (observed: real runs landed 2-5h apart,
+// not every 5min). Fewer, longer-lived runs are what GitHub actually honors reliably.
 import { gemini, tgApi, esc, fmtDate, chunkText, loadJson, saveJson, sleep } from './bot.mjs';
 import { fetchText, extractBody } from './lib.mjs';
 
 const STORE = 'data/articles.json', OFFSET = 'data/offset.json';
 const store = loadJson(STORE, {});
 const st = loadJson(OFFSET, { offset: 0 });
-const RUN_MS = Number(process.env.CALLBACK_RUN_MS || 270000); // ~4.5 min listening window per scheduled run
+const RUN_MS = Number(process.env.CALLBACK_RUN_MS || 3300000); // ~55 min listening window per scheduled run
 const startedAt = Date.now();
 
-// webhook + getUpdates are mutually exclusive — ensure polling works
-await tgApi('deleteWebhook', { drop_pending_updates: false });
+// webhook + getUpdates are mutually exclusive — ensure polling works.
+// FIX 2026-09-04: result was previously discarded, so a failed deleteWebhook (e.g. a stale
+// webhook left registered by an old n8n workflow on the same bot token) went unnoticed and
+// every getUpdates call below would then silently 409-conflict forever (data/offset.json had
+// been frozen since 2026-06-14 — zero updates received in ~3 months despite "success" runs).
+// drop_pending_updates:true also clears any backlog accumulated while it was broken.
+const dw = await tgApi('deleteWebhook', { drop_pending_updates: true });
+if (!dw || !dw.ok) console.log('WARNING: deleteWebhook did not confirm ok — getUpdates may 409:', JSON.stringify(dw).slice(0, 200));
+else console.log('deleteWebhook ok');
 
 async function handleTap(cq) {
   const id = String(cq.data || '').trim();
@@ -38,8 +48,8 @@ let handled = 0;
 while (Date.now() - startedAt < RUN_MS) {
   let upd;
   try { upd = await tgApi('getUpdates', { offset: st.offset, timeout: 25, allowed_updates: ['callback_query'] }); }
-  catch { await sleep(2000); continue; }
-  if (!upd || !upd.ok || !Array.isArray(upd.result)) { await sleep(1500); continue; }
+  catch (e) { console.log('getUpdates network error:', String(e).slice(0, 160)); await sleep(2000); continue; }
+  if (!upd || !upd.ok || !Array.isArray(upd.result)) { console.log('getUpdates not ok:', JSON.stringify(upd).slice(0, 200)); await sleep(1500); continue; }
   for (const u of upd.result) {
     st.offset = u.update_id + 1;               // advance cursor first so a failing tap is never retried forever
     if (!u.callback_query) continue;
