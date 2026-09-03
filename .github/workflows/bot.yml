@@ -7,7 +7,12 @@ on:
     # Hourly is a frequency GitHub Actions actually honors reliably; each run now long-polls
     # ~55 min so coverage stays near-continuous with only a small gap at the hour boundary.
     - cron: '13 * * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      test_seconds:
+        description: 'Optional: override listening window in seconds, for a quick manual verification run'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -31,6 +36,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          CALLBACK_RUN_MS: ${{ github.event.inputs.test_seconds && format('{0}000', github.event.inputs.test_seconds) || '' }}
         run: node callback.mjs
       - name: Commit offset
         run: |
