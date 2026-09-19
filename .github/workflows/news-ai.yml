@@ -1,14 +1,9 @@
-name: Qatar News Digest
+name: Qatar News Digest (AI, owner-triggered)
 
+# The ONLY workflow that carries the Gemini key. It has no schedule: it runs only when the owner starts it
+# (workflow_dispatch), which is interactive owner use. Scheduled digests (news.yml, bot.yml) are deterministic.
 on:
-  schedule:
-    - cron: '0 */6 * * *'   # every 6 hours (UTC). Change here to adjust cadence.
-  workflow_dispatch:         # allow manual run from the Actions tab
-    inputs:
-      reset:
-        description: 'Mark all current feed as seen WITHOUT sending, then send the "backlog finished" separator (one-time reset)'
-        type: boolean
-        default: false
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -18,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  digest:
+  digest-ai:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -27,12 +22,13 @@ jobs:
         with:
           node-version: '20'
       - run: npm ci
-      - name: Run digest
+      - name: Run digest with Gemini (owner-started)
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          AI_MODE: deterministic   # no model key is passed to a scheduled job (owner policy: unattended paid AI denied)
-          MARK_SEEN_ONLY: ${{ inputs.reset }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          AI_MODE: gemini
         run: node ingest.mjs
       - name: Commit state
         run: |
@@ -40,5 +36,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data
           if git diff --cached --quiet; then echo "no state changes"; exit 0; fi
-          git commit -m "state: digest $(date -u +%FT%TZ)"
+          git commit -m "state: digest (ai) $(date -u +%FT%TZ)"
           for i in 1 2 3; do git pull --rebase --autostash && git push && break || sleep 5; done

@@ -1,0 +1,41 @@
+name: verify
+
+# Fast checks on every push/PR: unit tests, a no-send dry run of the deterministic pipeline, and the cost policy
+# (no paid-AI credential or endpoint may appear in a scheduled workflow).
+on:
+  push:
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Policy unit tests
+        run: npm run test:policy
+      - name: Cost policy - scheduled workflows must not carry a paid-AI credential or endpoint
+        run: |
+          PAT='GEMINI|ANTHROPIC|OPENAI|generativelanguage|_API_KEY'
+          echo 'GEMINI_API_KEY: x' | grep -qE "$PAT" || { echo "::error::policy pattern is blind"; exit 1; }
+          bad=0
+          for f in $(grep -lE '^\s*(schedule:|- cron:)' .github/workflows/*.yml); do
+            if grep -nE "$PAT" "$f"; then echo "::error file=$f::paid-AI credential/endpoint in a scheduled workflow"; bad=1; fi
+          done
+          [ "$bad" -eq 0 ] || exit 1
+          echo "scheduled workflows: $(grep -lE '^\s*(schedule:|- cron:)' .github/workflows/*.yml | tr '\n' ' ')- clean"
+      - name: Deterministic dry run (fetches feeds, sends nothing, saves nothing)
+        env:
+          DRY_RUN: '1'
+          AI_MODE: deterministic
+          MAX_PER_RUN: '15'
+          PACE_MS: '0'
+        run: node ingest.mjs

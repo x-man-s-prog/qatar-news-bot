@@ -3,7 +3,7 @@
 // FIX 2026-09-04: was scheduled */5 min with a ~4.5min window — GitHub Actions silently drops
 // high-frequency (<15min) `schedule:` triggers under load (observed: real runs landed 2-5h apart,
 // not every 5min). Fewer, longer-lived runs are what GitHub actually honors reliably.
-import { gemini, tgApi, esc, fmtDate, chunkText, loadJson, saveJson, sleep } from './bot.mjs';
+import { gemini, tgApi, esc, fmtDate, chunkText, loadJson, saveJson, sleep, AI_ENABLED } from './bot.mjs';
 import { fetchText, extractBody } from './lib.mjs';
 
 const STORE = 'data/articles.json', OFFSET = 'data/offset.json';
@@ -32,11 +32,12 @@ async function handleTap(cq) {
   if (!text && a.url) { // fallback for older/pruned entries that lack stored text
     try { const r = await fetchText(a.url, { timeout: 25000, retries: 1 }); text = extractBody(r.body, a.url) || ''; } catch { /* leave empty -> placeholder */ }
   }
-  if (a.lang === 'en' && text) {
+  if (a.lang === 'en' && text && AI_ENABLED) {
     try { const tr = await gemini(`Translate the following Qatari newspaper article fully into clear Modern Standard Arabic. Output ONLY the Arabic translation, no preamble:\n\n${text}`, { maxTokens: 8192 }); if (tr) text = tr; }
     catch { /* quota/etc: fall back to original text */ }
   }
-  const header = `📰 <b>${esc(a.newspaper)}</b>  •  🗓 ${fmtDate(a.pub_date)}\n\n<b>${esc(a.title_ar)}</b>\n\n`;
+  const note = (a.lang === 'en' && !AI_ENABLED) ? '🌐 النص الأصلي بالإنجليزية (الترجمة الآلية معطّلة افتراضياً).\n\n' : '';
+  const header = `📰 <b>${esc(a.newspaper)}</b>  •  🗓 ${fmtDate(a.pub_date)}\n\n<b>${esc(a.title_ar)}</b>\n\n${note}`;
   const parts = chunkText(text, 3500);
   for (let i = 0; i < parts.length; i++) {
     await tgApi('sendMessage', { chat_id: chat, text: (i === 0 ? header : '') + esc(parts[i]), parse_mode: 'HTML', disable_web_page_preview: true });

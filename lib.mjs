@@ -236,3 +236,20 @@ export function extractBody(html, url) {
   } catch { /* fall through */ }
   return fallbackExtract(html);
 }
+
+// ---------- deterministic summary (replaces the unattended LLM call) ----------
+// First sentences of the extracted body (or the feed description), capped by characters. No model, no network.
+export function extractiveSummary(body, desc = '', { maxChars = 420, maxSentences = 3 } = {}) {
+  const clean = (x) => String(x || '').replace(/\s+/g, ' ').trim();
+  const src = clean(body).length >= 60 ? clean(body) : clean(desc) || clean(body);
+  if (!src) return '';
+  const parts = src.split(/(?<=[.!?؟…])\s+/).map(p => p.trim()).filter(p => p.length >= 25);
+  let out = '';
+  let n = 0;
+  for (const p of (parts.length ? parts : [src])) {
+    if (n >= maxSentences || (out && (out + ' ' + p).length > maxChars)) break;
+    out = out ? out + ' ' + p : p;
+    n++;
+  }
+  return out.length > maxChars ? out.slice(0, maxChars - 1).trimEnd() + '…' : out;
+}

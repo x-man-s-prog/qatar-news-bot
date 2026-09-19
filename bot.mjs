@@ -5,10 +5,18 @@ const TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
 const GEMINI_KEY = (process.env.GEMINI_API_KEY || '').trim();
 const MODEL = (process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
 
+// AI POLICY (owner directive 2026-09): unattended paid AI is DENIED by default. Gemini runs only when AI_MODE=gemini AND a key
+// is present, and only the owner-triggered workflow (news-ai.yml, workflow_dispatch) provides both. The scheduled workflows
+// (news.yml, bot.yml) carry no key and no AI_MODE, so they are deterministic and no request to a model provider can be made.
+export const AI_ENABLED = (process.env.AI_MODE || '').trim().toLowerCase() === 'gemini' && GEMINI_KEY.length > 0;
+export class AIDisabledError extends Error {}
+export const DRY_RUN = process.env.DRY_RUN === '1';   // fetch + process, but send nothing and write no state
+
 export class QuotaError extends Error {}
 export const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 export async function gemini(prompt, { maxTokens = 1024, temperature = 0.2 } = {}) {
+  if (!AI_ENABLED) throw new AIDisabledError('AI disabled by policy (AI_MODE is not gemini or no key): no request was made');
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_KEY}`;
   let r;
   try {
@@ -25,6 +33,7 @@ export async function gemini(prompt, { maxTokens = 1024, temperature = 0.2 } = {
 }
 
 export async function tgApi(method, payload) {
+  if (DRY_RUN) return { ok: true, result: {} };
   try {
     const r = await fetch(`https://api.telegram.org/bot${TOKEN}/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     return await r.json();
@@ -47,6 +56,7 @@ export function chunkText(s, max = 3500) {
 
 export function loadJson(path, def) { try { return JSON.parse(fs.readFileSync(path, 'utf8')); } catch { return def; } }
 export function saveJson(path, obj) {
+  if (DRY_RUN) return;
   const dir = path.split('/').slice(0, -1).join('/') || '.';
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path, JSON.stringify(obj));

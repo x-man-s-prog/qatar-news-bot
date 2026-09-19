@@ -1,12 +1,14 @@
 // Ingest: gather all Qatar papers + official gazette -> filter -> dedup -> summarize/translate -> Telegram.
 // No per-run cap. Fair round-robin across papers. Stops cleanly on Gemini quota (resumes next run).
-import { buildSources, GAZETTE_SOURCE, fetchText, parseSource, toCandidates, extractBody, makeSig, jaccard } from './lib.mjs';
-import { gemini, tgApi, esc, fmtDate, chunkText, loadJson, saveJson, pruneByTs, sleep, QuotaError } from './bot.mjs';
+import { buildSources, GAZETTE_SOURCE, fetchText, parseSource, toCandidates, extractBody, makeSig, jaccard, extractiveSummary } from './lib.mjs';
+import { gemini, tgApi, esc, fmtDate, chunkText, loadJson, saveJson, pruneByTs, sleep, QuotaError, AI_ENABLED, DRY_RUN } from './bot.mjs';
 
-const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const CHAT_ID = process.env.TELEGRAM_CHAT_ID || (DRY_RUN ? 'dry-run' : undefined);
 const SEEN = 'data/seen.json', STORE = 'data/articles.json', FLAGS = 'data/flags.json';
 const TH = Number(process.env.DEDUP_THRESHOLD || 0.5);
-const PACE_MS = Number(process.env.PACE_MS || 4200);   // ~14/min, respects Gemini free RPM
+const PACE_MS = Number(process.env.PACE_MS || (AI_ENABLED ? 4200 : 1100));   // AI mode ~14/min (Gemini RPM); deterministic mode ~1 msg/s (Telegram)
+const EN_NOTE = '\n\n🌐 النص الأصلي بالإنجليزية (الترجمة الآلية معطّلة افتراضياً).';
+console.log(AI_ENABLED ? 'MODE: gemini (owner-triggered AI run)' : 'MODE: deterministic (no model call)' + (DRY_RUN ? ' [DRY_RUN: nothing is sent or saved]' : ''));
 const SEEN_KEEP = 8000, STORE_KEEP = 800;
 const MARK_SEEN_ONLY = ['1', 'true'].includes((process.env.MARK_SEEN_ONLY || '').toLowerCase()); // reset: mark all current feed seen w/o sending, fire separator once
 
@@ -96,14 +98,16 @@ for (const c of work) {
   try {
     let title_ar = '', summary_ar = '', full_text = '';
     if (c.type === 'meezan') {
-      const expl = (await gemini(`اشرح بإيجاز شديد، في جملة أو جملتين بالعربية الفصحى المبسطة، ما الذي يقرره أو يعدله هذا التشريع القطري بناءً على عنوانه، دون مقدمة أو ألقاب أو رموز:\n${c.title_slug}`, { maxTokens: 300 })).trim();
+      const expl = !AI_ENABLED ? 'قرار أو تشريع جديد في الجريدة الرسمية. التفاصيل في النص الرسمي عبر الرابط.' : (await gemini(`اشرح بإيجاز شديد، في جملة أو جملتين بالعربية الفصحى المبسطة، ما الذي يقرره أو يعدله هذا التشريع القطري بناءً على عنوانه، دون مقدمة أو ألقاب أو رموز:\n${c.title_slug}`, { maxTokens: 300 })).trim();
       title_ar = c.title_slug;
       summary_ar = expl;
       full_text = `${title_ar}\n\n${expl}\n\n🔗 النص الرسمي الكامل على الميزان: ${c.url}`;
     } else {
       const r = await fetchText(c.url, { timeout: 25000, retries: 1 });
       const body = (extractBody(r.body, c.url) || c.desc || c.title_slug || '').slice(0, 9000);
-      const parsed = parseLLM(await gemini(buildPrompt(c, body), { maxTokens: 1024 }));
+      const parsed = AI_ENABLED
+        ? parseLLM(await gemini(buildPrompt(c, body), { maxTokens: 1024 }))
+        : { is_sport: false, title_ar: c.title_slug, summary_ar: (extractiveSummary(body, c.desc) || c.title_slug) + (c.lang === 'en' ? EN_NOTE : '') };
       if (parsed.is_sport) { seen[c.article_id] = { ts: Date.now(), sig: [], sent: 0, section: 'sport' }; sports++; await sleep(PACE_MS); continue; }
       title_ar = parsed.title_ar || c.title_slug;
       summary_ar = parsed.summary_ar;

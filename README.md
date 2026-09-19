@@ -27,3 +27,13 @@ Cloud, permanent digest of every Qatar newspaper → Arabic summaries on Telegra
 ## Notes
 - **لوسيل (Lusail)** is behind Cloudflare and may intermittently block server fetches (best‑effort).
 - The first run sends a catch‑up of the last ~48h, fairly across papers, draining over a few runs (and across days if the free Gemini quota is reached).
+
+## AI policy (owner directive 2026-09)
+Unattended paid AI is **denied by default**. The scheduled workflows (`news.yml` every 6 h, `bot.yml` hourly) carry **no model key** and run
+`AI_MODE=deterministic`: the digest uses the feed title plus a deterministic extractive summary (first sentences of the extracted article), the sports
+and jobs filters are rule-based, and an English article is sent in its original language with a note. No request to any model provider is possible.
+
+Gemini is still available **only when the owner starts it**: run the workflow *Qatar News Digest (AI, owner-triggered)* (`news-ai.yml`,
+`workflow_dispatch` only, the only place the `GEMINI_API_KEY` secret is referenced). Rollback of the whole change: `git revert` the merge commit, or
+restore the pre-change `news.yml`/`bot.yml` (last commit before this policy: 740feab).
+`verify.yml` fails any push that puts a paid-AI credential or endpoint into a scheduled workflow.

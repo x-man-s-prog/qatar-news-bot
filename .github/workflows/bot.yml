@@ -34,8 +34,7 @@ jobs:
       - name: Poll button taps
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          AI_MODE: deterministic   # no model key is passed to a scheduled job (owner policy: unattended paid AI denied)
           CALLBACK_RUN_MS: ${{ github.event.inputs.test_seconds && format('{0}000', github.event.inputs.test_seconds) || '' }}
         run: node callback.mjs
       - name: Commit offset

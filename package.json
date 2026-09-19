@@ -7,7 +7,7 @@
   "scripts": {
     "ingest": "node ingest.mjs",
     "callback": "node callback.mjs",
-    "test": "node test_lib.mjs"
+    "test": "node test_lib.mjs", "test:policy": "node --test test_policy.mjs"
   },
   "dependencies": {
     "@mozilla/readability": "^0.5.0",
